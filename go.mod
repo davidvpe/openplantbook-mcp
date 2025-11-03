@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/mark3labs/mcp-go v0.43.0
-	github.com/rmrfslashbin/openplantbook-go v1.0.0
+	github.com/rmrfslashbin/openplantbook-go v1.0.1
 	github.com/rs/xid v1.6.0
 	github.com/spf13/viper v1.21.0
 )

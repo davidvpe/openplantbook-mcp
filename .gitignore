@@ -28,6 +28,10 @@ config.json
 # MCP configuration (contains secrets)
 .mcp.json
 
+# Logs
+logs/
+*.log
+
 # IDE
 .vscode/
 .idea/

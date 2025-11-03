@@ -19,6 +19,7 @@ type Config struct {
 
 	// Optional settings
 	LogLevel     slog.Level
+	LogFile      string // Path to log file (optional, logs to stderr if empty)
 	CacheEnabled bool
 	CacheTTL     int // hours
 	DefaultLang  string
@@ -66,6 +67,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		APIKey:       v.GetString("api_key"),
 		ClientID:     v.GetString("client_id"),
 		ClientSecret: v.GetString("client_secret"),
+		LogFile:      v.GetString("log_file"),
 		CacheEnabled: v.GetBool("cache_enabled"),
 		CacheTTL:     v.GetInt("cache_ttl_hours"),
 		DefaultLang:  v.GetString("default_language"),

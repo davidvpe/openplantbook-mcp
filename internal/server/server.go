@@ -26,8 +26,18 @@ func New(config *Config, version string) (*Server, error) {
 	// Initialize trace ID for this server instance
 	traceID := xid.New().String()
 
-	// Set up structured logging to STDERR
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	// Determine log output destination
+	var logWriter *os.File = os.Stderr
+	if config.LogFile != "" {
+		var err error
+		logWriter, err = os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("open log file: %w", err)
+		}
+	}
+
+	// Set up structured logging
+	logger := slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
 		Level: config.LogLevel,
 	})).With(
 		"trace_id", traceID,
@@ -45,6 +55,11 @@ func New(config *Config, version string) (*Server, error) {
 		logger.Info("using OAuth2 authentication")
 		opts = append(opts, openplantbook.WithOAuth2(config.ClientID, config.ClientSecret))
 	}
+
+	// Disable rate limiting for MCP server usage
+	// The MCP server handles its own rate limiting via request throttling
+	opts = append(opts, openplantbook.DisableRateLimit())
+	logger.Info("rate limiting disabled for MCP server")
 
 	// Create OpenPlantbook SDK client
 	client, err := openplantbook.New(opts...)
@@ -195,7 +210,20 @@ func (s *Server) registerTools(mcpServer *server.MCPServer) error {
 		InputSchema: compareConditionsSchema,
 	}, s.handleCompareConditions)
 
-	s.logger.Info("registered tools", "count", 4)
+	// Tool 5: server_info
+	serverInfoSchema := mcp.ToolInputSchema{
+		Type:       "object",
+		Properties: map[string]interface{}{},
+		Required:   []string{},
+	}
+
+	mcpServer.AddTool(mcp.Tool{
+		Name:        "server_info",
+		Description: "Get server version, build information, and runtime status",
+		InputSchema: serverInfoSchema,
+	}, s.handleServerInfo)
+
+	s.logger.Info("registered tools", "count", 5)
 	return nil
 }
 
@@ -517,4 +545,63 @@ func compareConditions(details *openplantbook.PlantDetails, conditions map[strin
 	}
 
 	return analysis
+}
+
+// handleServerInfo handles the server_info tool
+func (s *Server) handleServerInfo(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	traceID := xid.New().String()
+	logger := s.logger.With("trace_id", traceID, "tool", "server_info")
+
+	logger.Info("retrieving server info")
+
+	// Build info response
+	info := map[string]interface{}{
+		"server": map[string]interface{}{
+			"name":    "openplantbook-mcp",
+			"version": s.version,
+		},
+		"sdk": map[string]interface{}{
+			"name":    "openplantbook-go",
+			"version": "v1.0.1",
+		},
+		"mcp_framework": map[string]interface{}{
+			"name":    "mcp-go",
+			"vendor":  "mark3labs",
+			"version": "v0.43.0",
+		},
+		"runtime": map[string]interface{}{
+			"pid":             os.Getpid(),
+			"tools_available": 5,
+		},
+		"config": map[string]interface{}{
+			"cache_enabled":    s.config.CacheEnabled,
+			"cache_ttl_hours":  s.config.CacheTTL,
+			"default_language": s.config.DefaultLang,
+			"log_level":        s.config.LogLevel.String(),
+			"log_file":         s.config.LogFile,
+			"auth_method":      getAuthMethod(s.config),
+		},
+	}
+
+	// Format response as pretty JSON
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		logger.Error("marshal server info failed", "error", err)
+		return mcp.NewToolResultError("failed to format server info"), nil
+	}
+
+	logger.Info("server info retrieved")
+
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// getAuthMethod returns a string indicating which auth method is configured
+func getAuthMethod(config *Config) string {
+	if config.APIKey != "" {
+		return "api_key"
+	}
+	if config.ClientID != "" && config.ClientSecret != "" {
+		return "oauth2"
+	}
+	return "none"
 }
