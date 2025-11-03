@@ -7,15 +7,17 @@ MCP (Model Context Protocol) server that provides AI assistants like Claude with
 
 ## Features
 
-- **4 MCP Tools** for plant data access:
+- **5 MCP Tools** for plant data access:
   - `search_plants` - Search for plants by name
   - `get_plant_care` - Get detailed care requirements
   - `get_care_summary` - Human-readable care summary
   - `compare_conditions` - Compare sensor readings against ideal ranges
+  - `server_info` - Get build metadata and runtime status
 - **Dual Authentication**: Supports both API Key and OAuth2
-- **Structured Logging**: JSON logs to STDERR with trace IDs
+- **Structured Logging**: JSON logs to STDERR or file with trace IDs
+- **Debug Logging**: Configurable log file output for troubleshooting
 - **Graceful Shutdown**: Proper signal handling
-- **Built on Official SDK**: Uses [openplantbook-go](https://github.com/rmrfslashbin/openplantbook-go) v1.0.0
+- **Built on Official SDK**: Uses [openplantbook-go](https://github.com/rmrfslashbin/openplantbook-go) v1.0.1
 
 ## Quick Start
 
@@ -188,6 +190,55 @@ Compare current sensor readings against ideal plant care ranges.
 }
 ```
 
+### server_info
+
+Get server version, build information, and runtime status.
+
+**Parameters:** None
+
+**Returns:**
+- Server version and build metadata
+- SDK version (openplantbook-go)
+- MCP framework details (mcp-go from mark3labs)
+- Runtime status (PID, tool count)
+- Configuration (cache, log level, auth method)
+
+**Example:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+  "server": {
+    "name": "openplantbook-mcp",
+    "version": "v1.0.0"
+  },
+  "sdk": {
+    "name": "openplantbook-go",
+    "version": "v1.0.1"
+  },
+  "mcp_framework": {
+    "name": "mcp-go",
+    "vendor": "mark3labs",
+    "version": "v0.43.0"
+  },
+  "runtime": {
+    "pid": 12345,
+    "tools_available": 5
+  },
+  "config": {
+    "auth_method": "api_key",
+    "cache_enabled": true,
+    "cache_ttl_hours": 24,
+    "default_language": "en",
+    "log_level": "INFO",
+    "log_file": ""
+  }
+}
+```
+
 ## Configuration Options
 
 ### Environment Variables
@@ -198,6 +249,7 @@ Compare current sensor readings against ideal plant care ranges.
 | `OPENPLANTBOOK_CLIENT_ID` | OAuth2 client ID | - |
 | `OPENPLANTBOOK_CLIENT_SECRET` | OAuth2 client secret | - |
 | `OPENPLANTBOOK_LOG_LEVEL` | Log level (debug, info, warn, error) | info |
+| `OPENPLANTBOOK_LOG_FILE` | Path to log file (logs to stderr if not set) | - |
 | `OPENPLANTBOOK_CACHE_ENABLED` | Enable caching | true |
 | `OPENPLANTBOOK_CACHE_TTL_HOURS` | Cache TTL in hours | 24 |
 | `OPENPLANTBOOK_DEFAULT_LANGUAGE` | Default language code | en |
@@ -286,16 +338,37 @@ Configuration error: multiple authentication methods provided
 
 ### Viewing Logs
 
-The server logs to STDERR in JSON format. In Claude Desktop, logs include:
+The server logs to STDERR in JSON format (or to a file if `OPENPLANTBOOK_LOG_FILE` is set). In Claude Desktop, logs include:
 - Trace IDs for request tracking
 - Tool invocations with parameters
 - API call results
 - Error details
 
+**Enable debug logging:**
+```json
+{
+  "mcpServers": {
+    "openplantbook": {
+      "command": "/path/to/openplantbook-mcp",
+      "env": {
+        "OPENPLANTBOOK_API_KEY": "your_api_key",
+        "OPENPLANTBOOK_LOG_LEVEL": "debug",
+        "OPENPLANTBOOK_LOG_FILE": "/path/to/logs/mcp-server.log"
+      }
+    }
+  }
+}
+```
+
+### Slow Response Times
+
+The MCP server disables the SDK's default rate limiter to prevent 7+ minute delays between requests. If you need rate limiting, consider implementing it at the application level or using the SDK's `WithRateLimit()` option when creating the client.
+
 ## Performance
 
-- **Caching**: API responses cached for 24 hours (plant details) or 1 hour (search results)
-- **Rate Limiting**: Respects OpenPlantbook's 200 requests/day limit
+- **Caching**: API responses cached for 24 hours by default (configurable)
+- **Rate Limiting**: SDK rate limiter disabled for MCP server use (prevents multi-minute delays)
+- **Fast Responses**: Typical API calls complete in <2 seconds
 - **Concurrent Safe**: All operations are thread-safe
 
 ## Contributing
