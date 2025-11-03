@@ -25,6 +25,9 @@ config.json
 !examples/config.example.json
 !examples/claude_desktop_config.json
 
+# MCP configuration (contains secrets)
+.mcp.json
+
 # IDE
 .vscode/
 .idea/
