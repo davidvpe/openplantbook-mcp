@@ -114,20 +114,27 @@ func TestServer_HandleSearchPlants(t *testing.T) {
 					return
 				}
 
+				// Cast to TextContent
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
 				// Parse the JSON response
-				var searchResult openplantbook.SearchResult
-				if err := json.Unmarshal([]byte(result.Content[0].Text), &searchResult); err != nil {
+				var searchResults []openplantbook.PlantSearchResult
+				if err := json.Unmarshal([]byte(textContent.Text), &searchResults); err != nil {
 					t.Errorf("failed to parse result: %v", err)
 					return
 				}
 
-				if len(searchResult.Results) == 0 {
+				if len(searchResults) == 0 {
 					t.Error("expected search results")
 				}
 
-				t.Logf("Found %d plants", len(searchResult.Results))
-				for _, plant := range searchResult.Results {
-					t.Logf("  - %s (PID: %s)", plant.DisplayName, plant.PID)
+				t.Logf("Found %d plants", len(searchResults))
+				for _, plant := range searchResults {
+					t.Logf("  - %s (PID: %s)", plant.DisplayPID, plant.PID)
 				}
 			},
 		},
@@ -148,7 +155,7 @@ func TestServer_HandleSearchPlants(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := mcp.CallToolRequest{
-				Params: mcp.CallToolRequestParams{
+				Params: mcp.CallToolParams{
 					Name:      "search_plants",
 					Arguments: tt.arguments,
 				},
@@ -185,7 +192,7 @@ func TestServer_HandleGetPlantCare(t *testing.T) {
 		{
 			name: "get monstera deliciosa details",
 			arguments: map[string]interface{}{
-				"pid":      "monstera-deliciosa",
+				"pid":      "monstera deliciosa",
 				"language": "en",
 			},
 			wantErr: false,
@@ -195,17 +202,23 @@ func TestServer_HandleGetPlantCare(t *testing.T) {
 					return
 				}
 
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
 				var details openplantbook.PlantDetails
-				if err := json.Unmarshal([]byte(result.Content[0].Text), &details); err != nil {
+				if err := json.Unmarshal([]byte(textContent.Text), &details); err != nil {
 					t.Errorf("failed to parse result: %v", err)
 					return
 				}
 
-				if details.PID != "monstera-deliciosa" {
-					t.Errorf("expected PID monstera-deliciosa, got %s", details.PID)
+				if details.PID != "monstera deliciosa" {
+					t.Errorf("expected PID 'monstera deliciosa', got %s", details.PID)
 				}
 
-				t.Logf("Plant: %s", details.DisplayName)
+				t.Logf("Plant: %s", details.DisplayPID)
 				t.Logf("Light: %d-%d lux", details.MinLightLux, details.MaxLightLux)
 				t.Logf("Temp: %.1f-%.1f°C", details.MinTemp, details.MaxTemp)
 			},
@@ -239,7 +252,7 @@ func TestServer_HandleGetPlantCare(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := mcp.CallToolRequest{
-				Params: mcp.CallToolRequestParams{
+				Params: mcp.CallToolParams{
 					Name:      "get_plant_care",
 					Arguments: tt.arguments,
 				},
@@ -276,7 +289,7 @@ func TestServer_HandleGetCareSummary(t *testing.T) {
 		{
 			name: "get basil care summary metric",
 			arguments: map[string]interface{}{
-				"pid":    "basil-sweet",
+				"pid":    "ocimum basilicum",
 				"metric": true,
 			},
 			wantErr: false,
@@ -286,11 +299,16 @@ func TestServer_HandleGetCareSummary(t *testing.T) {
 					return
 				}
 
-				summary := result.Content[0].Text
-				t.Logf("Care summary:\n%s", summary)
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
+				t.Logf("Care summary:\n%s", textContent.Text)
 
 				// Should contain markdown formatting
-				if len(summary) < 100 {
+				if len(textContent.Text) < 100 {
 					t.Error("summary seems too short")
 				}
 			},
@@ -298,7 +316,7 @@ func TestServer_HandleGetCareSummary(t *testing.T) {
 		{
 			name: "get basil care summary imperial",
 			arguments: map[string]interface{}{
-				"pid":    "basil-sweet",
+				"pid":    "ocimum basilicum",
 				"metric": false,
 			},
 			wantErr: false,
@@ -308,10 +326,15 @@ func TestServer_HandleGetCareSummary(t *testing.T) {
 					return
 				}
 
-				summary := result.Content[0].Text
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
 				// Imperial units should show °F
 				// Note: We'll add this in the future
-				t.Logf("Care summary (imperial):\n%s", summary)
+				t.Logf("Care summary (imperial):\n%s", textContent.Text)
 			},
 		},
 	}
@@ -319,7 +342,7 @@ func TestServer_HandleGetCareSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := mcp.CallToolRequest{
-				Params: mcp.CallToolRequestParams{
+				Params: mcp.CallToolParams{
 					Name:      "get_care_summary",
 					Arguments: tt.arguments,
 				},
@@ -356,7 +379,7 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 		{
 			name: "compare ideal conditions",
 			arguments: map[string]interface{}{
-				"pid": "monstera-deliciosa",
+				"pid": "monstera deliciosa",
 				"current_conditions": map[string]interface{}{
 					"moisture":    45.0,
 					"temperature": 22.0,
@@ -371,11 +394,16 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 					return
 				}
 
-				comparison := result.Content[0].Text
-				t.Logf("Comparison result:\n%s", comparison)
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
+				t.Logf("Comparison result:\n%s", textContent.Text)
 
 				// Should contain status indicators
-				if len(comparison) < 50 {
+				if len(textContent.Text) < 50 {
 					t.Error("comparison seems too short")
 				}
 			},
@@ -383,7 +411,7 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 		{
 			name: "compare low moisture",
 			arguments: map[string]interface{}{
-				"pid": "monstera-deliciosa",
+				"pid": "monstera deliciosa",
 				"current_conditions": map[string]interface{}{
 					"moisture":    15.0,
 					"temperature": 22.0,
@@ -398,8 +426,13 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 					return
 				}
 
-				comparison := result.Content[0].Text
-				t.Logf("Low moisture comparison:\n%s", comparison)
+				textContent, ok := mcp.AsTextContent(result.Content[0])
+				if !ok {
+					t.Error("expected TextContent")
+					return
+				}
+
+				t.Logf("Low moisture comparison:\n%s", textContent.Text)
 
 				// Should indicate moisture issue
 			},
@@ -407,7 +440,7 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 		{
 			name: "missing conditions",
 			arguments: map[string]interface{}{
-				"pid": "monstera-deliciosa",
+				"pid": "monstera deliciosa",
 			},
 			wantErr: false,
 			validate: func(t *testing.T, result *mcp.CallToolResult) {
@@ -421,7 +454,7 @@ func TestServer_HandleCompareConditions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := mcp.CallToolRequest{
-				Params: mcp.CallToolRequestParams{
+				Params: mcp.CallToolParams{
 					Name:      "compare_conditions",
 					Arguments: tt.arguments,
 				},
